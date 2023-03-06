@@ -1,0 +1,33 @@
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: esb-mdb
+spec:
+  lookupPolicy:
+    local: false
+  tags:
+    - name: java11-latest
+      annotations: null
+      from:
+        kind: DockerImage
+        name: 'quay.io/quarkus-esb-reactive/esb-mdb:java11-latest'
+      importPolicy: {}
+      referencePolicy:
+        type: Source
+    - name: java17-latest
+      annotations: null
+      from:
+        kind: DockerImage
+        name: 'quay.io/quarkus-esb-reactive/esb-mdb:java17-latest'
+      importPolicy: { }
+      referencePolicy:
+        type: Source
+    - name: native-latest
+      annotations: null
+      from:
+        kind: DockerImage
+        name: 'quay.io/quarkus-esb-reactive/esb-mdb:native-latest'
+      importPolicy: { }
+      referencePolicy:
+        type: Source

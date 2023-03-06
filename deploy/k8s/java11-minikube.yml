@@ -1,0 +1,256 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    app.quarkus.io/vcs-ref: main
+    app.quarkus.io/vcs-url: https://github.com/quarkusio/quarkus-esb-reactive
+    app.openshift.io/connects-to: "mdb-db,otel-collector"
+    app.quarkus.io/build-timestamp: 2023-02-17 - 14:22:10 +0000
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /q/metrics
+    prometheus.io/port: "8083"
+    prometheus.io/scheme: http
+  labels:
+    app.kubernetes.io/name: esb-mdb
+    app.kubernetes.io/part-of: mdb-service
+    app.kubernetes.io/version: java11-latest
+    app: esb-mdb
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: esb-mdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: esb-mdb
+      app.kubernetes.io/part-of: mdb-service
+      app.kubernetes.io/version: java11-latest
+  template:
+    metadata:
+      annotations:
+        app.quarkus.io/vcs-ref: main
+        app.quarkus.io/vcs-url: https://github.com/quarkusio/quarkus-esb-reactive
+        app.openshift.io/connects-to: "mdb-db,otel-collector"
+        app.quarkus.io/build-timestamp: 2023-02-17 - 14:22:10 +0000
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /q/metrics
+        prometheus.io/port: "8083"
+        prometheus.io/scheme: http
+      labels:
+        app.kubernetes.io/name: esb-mdb
+        app.kubernetes.io/part-of: mdb-service
+        app.kubernetes.io/version: java11-latest
+        app: esb-mdb
+        application: mdb-service
+        system: quarkus-esb-reactive
+    spec:
+      containers:
+        - env:
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          envFrom:
+            - secretRef:
+                name: esb-mdb-config-creds
+            - configMapRef:
+                name: esb-mdb-config
+          image: quay.io/quarkus-esb-reactive/esb-mdb:java11-latest
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/live
+              port: 8083
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          name: esb-mdb
+          ports:
+            - containerPort: 8083
+              name: http
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /q/health/ready
+              port: 8083
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          resources:
+            limits:
+              memory: 768Mi
+            requests:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: esb-mdb
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: esb-mdb-config
+data:
+  quarkus.hibernate-orm.database.generation: validate
+  quarkus.hibernate-orm.sql-load-script: no-file
+  quarkus.datasource.reactive.url: postgresql://mdb-db:5432/mdb_database
+  quarkus.opentelemetry.tracer.exporter.otlp.endpoint: http://otel-collector:4317
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app: esb-mdb
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: esb-mdb-config-creds
+data:
+  quarkus.datasource.username: c3VwZXJtYW4=
+  quarkus.datasource.password: c3VwZXJtYW4=
+type: Opaque
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  labels:
+    app: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: mdb-db-config
+data:
+  POSTGRESQL_DATABASE: aGVyb2VzX2RhdGFiYXNl
+  POSTGRESQL_USERNAME: c3VwZXJtYW4=
+  POSTGRESQL_PASSWORD: c3VwZXJtYW4=
+type: Opaque
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: mdb-db-init
+data:
+  get-data.sh: |-
+    #!/bin/bash
+
+    curl https://raw.githubusercontent.com/quarkusio/quarkus-esb-reactive/main/esb-mdb/deploy/db-init/initialize-tables.sql --output /docker-entrypoint-initdb.d/1-init-tables.sql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+    app.kubernetes.io/part-of: mdb-service
+    app.openshift.io/runtime: postgresql
+  name: mdb-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: mdb-db
+  template:
+    metadata:
+      labels:
+        name: mdb-db
+        application: mdb-service
+        system: quarkus-esb-reactive
+    spec:
+      containers:
+        - envFrom:
+            - secretRef:
+                name: mdb-db-config
+          image: bitnami/postgresql:14
+          name: mdb-db
+          ports:
+            - containerPort: 5432
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              memory: 32Mi
+          volumeMounts:
+            - mountPath: /bitnami/postgresql
+              name: mdb-db-data
+            - mountPath: /docker-entrypoint-initdb.d
+              name: mdb-db-init-data
+      initContainers:
+        - command:
+            - sh
+            - get-data.sh
+          image: registry.access.redhat.com/ubi8-minimal:8.6
+          name: get-data
+          volumeMounts:
+            - mountPath: /docker-entrypoint-preinitdb.d
+              name: mdb-db-init
+            - mountPath: /docker-entrypoint-initdb.d
+              name: mdb-db-init-data
+          workingDir: /docker-entrypoint-preinitdb.d
+      volumes:
+        - emptyDir: {}
+          name: mdb-db-data
+        - emptyDir: {}
+          name: mdb-db-init-data
+        - configMap:
+            name: mdb-db-init
+          name: mdb-db-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: mdb-db
+spec:
+  ports:
+    - port: 5432
+      protocol: TCP
+      targetPort: 5432
+  selector:
+    name: mdb-db
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    app.quarkus.io/vcs-ref: main
+    app.quarkus.io/vcs-url: https://github.com/quarkusio/quarkus-esb-reactive
+    app.openshift.io/connects-to: "mdb-db,otel-collector"
+    app.quarkus.io/build-timestamp: 2023-02-17 - 14:22:10 +0000
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /q/metrics
+    prometheus.io/port: "8083"
+    prometheus.io/scheme: http
+  labels:
+    app.kubernetes.io/name: esb-mdb
+    app.kubernetes.io/part-of: mdb-service
+    app.kubernetes.io/version: java11-latest
+    app: esb-mdb
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: esb-mdb
+spec:
+  ports:
+    - name: http
+      nodePort: 30471
+      port: 80
+      protocol: TCP
+      targetPort: 8083
+  selector:
+    app.kubernetes.io/name: esb-mdb
+    app.kubernetes.io/part-of: mdb-service
+    app.kubernetes.io/version: java11-latest
+  type: NodePort

@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: esb-mdb-config
+  labels:
+    app: esb-mdb
+    application: mdb-service
+    system: quarkus-esb-reactive
+data:
+  quarkus.hibernate-orm.database.generation: validate
+  quarkus.hibernate-orm.sql-load-script: no-file
+  quarkus.datasource.reactive.url: postgresql://mdb-db:5432/mdb_database
+  quarkus.opentelemetry.tracer.exporter.otlp.endpoint: http://otel-collector:4317
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: esb-mdb-config-creds
+  labels:
+    app: esb-mdb
+    application: mdb-service
+    system: quarkus-esb-reactive
+data:
+  quarkus.datasource.username: c3VwZXJtYW4=
+  quarkus.datasource.password: c3VwZXJtYW4=
+---
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: mdb-db-config
+  labels:
+    app: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+data:
+  POSTGRESQL_DATABASE: bWRiX2RhdGFiYXNl
+  POSTGRESQL_USERNAME: bWRi
+  POSTGRESQL_PASSWORD: bWRi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mdb-db-init
+  labels:
+    app: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+data:
+  get-data.sh: |-
+    #!/bin/bash
+    
+    curl https://raw.githubusercontent.com/quarkusio/quarkus-esb-reactive/main/esb-mdb/deploy/db-init/initialize-tables.sql --output /docker-entrypoint-initdb.d/1-init-tables.sql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+    app.kubernetes.io/part-of: mdb-service
+    app.openshift.io/runtime: postgresql
+  name: mdb-db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: mdb-db
+  template:
+    metadata:
+      labels:
+        name: mdb-db
+        application: mdb-service
+        system: quarkus-esb-reactive
+    spec:
+      initContainers:
+        - name: get-data
+          image: registry.access.redhat.com/ubi8-minimal:8.6
+          workingDir: /docker-entrypoint-preinitdb.d
+          command:
+            - 'sh'
+            - 'get-data.sh'
+          volumeMounts:
+            - name: mdb-db-init
+              mountPath: /docker-entrypoint-preinitdb.d
+            - name: mdb-db-init-data
+              mountPath: /docker-entrypoint-initdb.d
+      containers:
+        - image: bitnami/postgresql:14
+          name: mdb-db
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: mdb-db-config
+          volumeMounts:
+            - name: mdb-db-data
+              mountPath: /bitnami/postgresql
+            - name: mdb-db-init-data
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              memory: 32Mi
+      volumes:
+        - name: mdb-db-data
+          emptyDir: {}
+        - name: mdb-db-init-data
+          emptyDir: {}
+        - name: mdb-db-init
+          configMap:
+            name: mdb-db-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: mdb-db
+    application: mdb-service
+    system: quarkus-esb-reactive
+  name: mdb-db
+spec:
+  ports:
+    - port: 5432
+      protocol: TCP
+      targetPort: 5432
+  selector:
+    name: mdb-db
+  type: ClusterIP

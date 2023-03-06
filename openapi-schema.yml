@@ -1,0 +1,121 @@
+---
+openapi: 3.0.3
+info:
+  title: Hero API
+  description: This API allows all operations on a Transaction
+  contact:
+    name: Quarkus
+    url: https://github.com/quarkusio
+  version: "1.0"
+servers:
+- url: http://localhost:8080
+tags:
+- name: online
+- name: transactions
+paths:
+  /api/transactions:
+    get:
+      tags:
+      - transactions
+      summary: Returns all the transactions from the database
+      parameters:
+      - name: trxId_filter
+        in: query
+        description: An optional filter parameter to filter results by name
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Gets all transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Hero'
+
+    post:
+      tags:
+      - transactions
+      summary: Creates a valid transaction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Hero'
+      responses:
+        "201":
+          description: The URI of the created transaction
+          headers:
+            Location:
+              style: simple
+              schema:
+                format: uri
+                type: string
+        "400":
+          description: Invalid transaction passed in (or no request body found)
+          
+  /api/online:
+    get:
+      tags:
+      - online
+      summary: Ping online
+      responses:
+        "200":
+          description: Ping am online
+          content:
+            text/plain:
+              schema:
+                type: string
+  
+  
+  /api/transactions/{id}:
+    get:
+      tags:
+      - transactions
+      summary: Returns a transaction for a given identifier
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          format: int64
+          type: integer
+      responses:
+        "200":
+          description: Gets a transaction for a given id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hero'
+        "404":
+          description: The transaction is not found for a given identifier
+
+components:
+  schemas:
+    Hero:
+      required:
+      - name
+      - level
+      type: object
+      properties:
+        id:
+          format: int64
+          type: integer
+        name:
+          maxLength: 50
+          minLength: 3
+          type: string
+          nullable: false
+        otherName:
+          type: string
+        level:
+          format: int32
+          minimum: 1
+          type: integer
+          nullable: false
+        picture:
+          type: string
+        powers:
+          type: string

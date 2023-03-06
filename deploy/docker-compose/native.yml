@@ -1,0 +1,42 @@
+version: "3"
+services:
+
+  mdb-db:
+    image: postgres:14
+    container_name: mdb-db
+    ports:
+      - "5432"
+    environment:
+      POSTGRES_USER: superman
+      POSTGRES_PASSWORD: superman
+      POSTGRES_DB: mdb_database
+    volumes:
+      - ../../../esb-mdb/deploy/db-init/initialize-tables.sql:/docker-entrypoint-initdb.d/1-init-tables.sql
+
+  esb-mdb-native:
+    image: quay.io/quarkus-esb-reactive/esb-mdb:native-latest
+    container_name: esb-mdb-native
+    depends_on:
+      - mdb-db
+    ports:
+      - "8083:8083"
+    environment:
+      QUARKUS_DATASOURCE_REACTIVE_URL: postgresql://mdb-db:5432/mdb_database
+      QUARKUS_HIBERNATE_ORM_DATABASE_GENERATION: validate
+      QUARKUS_DATASOURCE_USERNAME: superman
+      QUARKUS_DATASOURCE_PASSWORD: superman
+      QUARKUS_HIBERNATE_ORM_SQL_LOAD_SCRIPT: no-file
+      QUARKUS_OPENTELEMETRY_TRACER_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    restart: on-failure
+    networks:
+      default:
+        aliases:
+          - esb-mdb
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
+        reservations:
+          memory: 256M
+          cpus: '0.5'
